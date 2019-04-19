@@ -79,8 +79,8 @@ int run(App& app) {
                 break;
 
             case SDL_KEYDOWN:
-                if (e.key.keysym.scancode == SDL_SCANCODE_ESCAPE) s_running = false;
-                else app.key(e.key.keysym.scancode);
+                //if (e.key.keysym.scancode == SDL_SCANCODE_ESCAPE) s_running = false;
+                app.key(e.key.keysym.scancode);
                 break;
 
             case SDL_WINDOWEVENT:

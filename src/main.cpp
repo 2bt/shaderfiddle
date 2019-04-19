@@ -23,6 +23,8 @@ char const*           m_path;
 
 
 void load_shader() {
+    printf("loading shader...\n");
+
     std::ifstream file(m_path);
     if (!file.is_open()) {
         printf("cannot open shader file\n");
@@ -116,14 +118,16 @@ void load_shader() {
 
     code << buf.str();
     m_shader = gfx::Shader::create(nullptr, code.str().c_str());
+
+    printf("done\n");
 }
 
 
-void event_callback(uv_fs_event_t* handle, const char* path, int events, int status) {
+void event_callback(uv_fs_event_t* handle, const char*, int events, int) {
     if (events & UV_CHANGE) {
         uv_fs_event_stop(handle);
         load_shader();
-        uv_fs_event_start(handle, &event_callback, path, 0);
+        uv_fs_event_start(handle, &event_callback, m_path, 0);
     }
 }
 
@@ -174,6 +178,10 @@ public:
         if (!m_shader) return;
 
         gui::new_frame();
+        gui::set_next_window_pos({5, 5});
+        gui::begin_window("Variables");
+
+
         for (Variable& v : m_variables) {
             gui::drag_float(v.name.c_str(), v.val, 1, v.min, v.max);
             std::string u = "_" + v.name;

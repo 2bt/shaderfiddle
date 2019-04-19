@@ -619,7 +619,7 @@ bool radio_button(const char* label, int& v, int value) {
 }
 
 
-const int item_width_default = 20 * FONT_WIDTH;
+const int item_width_default = 24 * FONT_WIDTH;
 
 
 bool drag_float(const char* label, float& v, float speed, float min, float max, const char* fmt) {
