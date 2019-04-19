@@ -95,11 +95,11 @@ void load_shader() {
             }
 
             // allocate variable
-            if (std::none_of(m_variables.begin(), m_variables.end(), [&var](auto& v){
+            auto it = std::find_if(m_variables.begin(), m_variables.end(), [&var](auto& v) {
                 return v.name == var.name;
-            })) {
-                m_variables.emplace_back(var);
-            }
+            });
+            if (it != m_variables.end()) *it = var;
+            else  m_variables.emplace_back(var);
 
             buf << "_" << var.name;
         }
