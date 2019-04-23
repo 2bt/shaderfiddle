@@ -13,6 +13,7 @@ struct Variable {
     float       min;
     float       max;
     float       val;
+    bool        active;
 };
 
 std::vector<Variable> m_variables;
@@ -34,6 +35,10 @@ void load_shader() {
     if (m_shader) delete m_shader;
     m_shader = nullptr;
 
+    for (Variable& v : m_variables) {
+        v.active = false;
+    }
+
     std::stringstream buf;
     char c;
 
@@ -45,6 +50,10 @@ void load_shader() {
     auto parse_number = [&c, &file](){
         std::string s;
         while (isspace(c)) file.get(c);
+        if (c == '-') {
+            s += '-';
+            file.get(c);
+        }
         while (isalnum(c)) {
             s += c;
             file.get(c);
@@ -67,7 +76,7 @@ void load_shader() {
     while (file.get(c)) {
         // find $variables
         if (c == '$') {
-            Variable var { "", 0, 1, 0.5 };
+            Variable var { "", 0, 1, 0.5, true };
             while (file.get(c) && (isalnum(c) || c == '_')) var.name += c;
             if (var.name.empty()) {
                 printf("variable error: name empty\n");
@@ -98,7 +107,10 @@ void load_shader() {
             auto it = std::find_if(m_variables.begin(), m_variables.end(), [&var](auto& v) {
                 return v.name == var.name;
             });
-            if (it != m_variables.end()) *it = var;
+            if (it != m_variables.end()) {
+                var.val = it->val;
+                *it = var;
+            }
             else  m_variables.emplace_back(var);
 
             buf << "_" << var.name;
@@ -113,7 +125,7 @@ void load_shader() {
             "uniform float iFrame;\n"
             "uniform vec2 iResolution;\n";
     for (Variable const& v : m_variables) {
-        code << "uniform float _" << v.name << ";\n";
+        if (v.active) code << "uniform float _" << v.name << ";\n";
     }
 
     code << buf.str();
@@ -183,6 +195,7 @@ public:
 
 
         for (Variable& v : m_variables) {
+            if (!v.active) continue;
             gui::drag_float(v.name.c_str(), v.val, 1, v.min, v.max);
             std::string u = "_" + v.name;
             if (m_shader->has_uniform(u)) m_shader->set_uniform(u, v.val);
