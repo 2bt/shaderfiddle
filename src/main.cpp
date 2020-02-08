@@ -108,7 +108,6 @@ public:
         gui::begin_window("Variables");
 
         for (Variable& v : m_variables) {
-            if (!v.active) continue;
             std::string u = "_" + v.name;
             if (m_shader->has_uniform(u)) {
                 gui::drag_float(v.name.c_str(), v.val, 1, v.min, v.max);
@@ -144,7 +143,6 @@ private:
         float       min;
         float       max;
         float       val;
-        bool        active;
     };
 
     char const*           m_path;
@@ -173,10 +171,6 @@ void App::load_shader() {
 
     if (m_shader) delete m_shader;
     m_shader = nullptr;
-
-    for (Variable& v : m_variables) {
-        v.active = false;
-    }
 
     std::stringstream buf;
     char c;
@@ -215,7 +209,7 @@ void App::load_shader() {
     while (file.get(c)) {
         // find $variables
         if (c == '$') {
-            Variable var { "", 0, 1, 0.5, true };
+            Variable var { "", 0, 1, 0.5 };
             while (file.get(c) && (isalnum(c) || c == '_')) var.name += c;
             if (var.name.empty()) {
                 printf("variable error: name empty\n");
@@ -247,10 +241,12 @@ void App::load_shader() {
                 return v.name == var.name;
             });
             if (it != m_variables.end()) {
-                var.val = it->val;
-                *it = var;
+                if (var.min != 0 || var.max != 1) {
+                    var.val = it->val;
+                    *it = var;
+                }
             }
-            else  m_variables.emplace_back(var);
+            else m_variables.emplace_back(var);
 
             buf << "_" << var.name;
         }
@@ -267,7 +263,7 @@ void App::load_shader() {
             "uniform float iFrame;\n"
             "uniform vec2 iResolution;\n";
     for (Variable const& v : m_variables) {
-        if (v.active) ss << "uniform float _" << v.name << ";\n";
+        ss << "uniform float _" << v.name << ";\n";
         ++prelines;
     }
     ss << buf.str();
