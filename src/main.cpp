@@ -8,7 +8,6 @@
 #include <uv.h>
 
 
-
 class App : public fx::App {
 public:
     App(char* const path) : m_path(path) {}
@@ -31,6 +30,7 @@ public:
         m_va->set_count(v.size());
 
         load_shader();
+        m_handle.data = this;
 
         m_loop = uv_default_loop();
         uv_fs_event_init(m_loop, &m_handle);
@@ -49,24 +49,49 @@ public:
         gui::process_event(e);
     }
 
+
     void update() override {
         uv_run(m_loop, UV_RUN_NOWAIT);
+        if (!m_shader) return;
         ++m_frame;
 
-        if (!m_shader) return;
+        const Uint8* ks = SDL_GetKeyboardState(nullptr);
+        m_y_ang += (ks[SDL_SCANCODE_RIGHT] - ks[SDL_SCANCODE_LEFT]) * 0.02f;
+        m_x_ang += (ks[SDL_SCANCODE_DOWN] - ks[SDL_SCANCODE_UP]) * 0.02f;
 
-        gui::new_frame();
-        gui::set_next_window_pos({5, 5});
-        gui::begin_window("Variables");
+        float cy = cosf(m_y_ang);
+        float sy = sinf(m_y_ang);
+        float cx = cosf(m_x_ang);
+        float sx = sinf(m_x_ang);
 
+        glm::mat3 eye = glm::mat3{
+            cy, 0, -sy,
+            0, 1, 0,
+            sy, 0, cy,
+        } * glm::mat3{
+            1, 0, 0,
+            0, cx, sx,
+            0, -sx, cx,
+        };
 
-        for (Variable& v : m_variables) {
-            if (!v.active) continue;
-            gui::drag_float(v.name.c_str(), v.val, 1, v.min, v.max);
-            std::string u = "_" + v.name;
-            if (m_shader->has_uniform(u)) m_shader->set_uniform(u, v.val);
+        glm::vec3 mov = {
+            ks[SDL_SCANCODE_D]     - ks[SDL_SCANCODE_A],
+            ks[SDL_SCANCODE_SPACE] - ks[SDL_SCANCODE_LSHIFT],
+            ks[SDL_SCANCODE_W]     - ks[SDL_SCANCODE_S],
+        };
+        m_pos += eye * mov * 0.1f;
+
+        if (mov != glm::vec3()) {
+            printf("%f, %f, %f | %f, %f\n",
+                    m_pos.x, m_pos.y, m_pos.z, m_x_ang, m_y_ang);
         }
 
+        if (m_shader->has_uniform("iPos")) {
+            m_shader->set_uniform("iPos", m_pos);
+        }
+        if (m_shader->has_uniform("iEye")) {
+            m_shader->set_uniform("iEye", eye);
+        }
         if (m_shader->has_uniform("iResolution")) {
             m_shader->set_uniform("iResolution", glm::vec2(fx::screen_width(), fx::screen_height()));
         }
@@ -75,6 +100,20 @@ public:
         }
         if (m_shader->has_uniform("iTime")) {
             m_shader->set_uniform("iTime", (SDL_GetTicks() - m_start_time) * 0.001f);
+        }
+
+
+        gui::new_frame();
+        gui::set_next_window_pos({5, 5});
+        gui::begin_window("Variables");
+
+        for (Variable& v : m_variables) {
+            if (!v.active) continue;
+            std::string u = "_" + v.name;
+            if (m_shader->has_uniform(u)) {
+                gui::drag_float(v.name.c_str(), v.val, 1, v.min, v.max);
+                m_shader->set_uniform(u, v.val);
+            }
         }
 
         gfx::clear({0, 0, 0, 1});
@@ -87,7 +126,7 @@ private:
 
     void load_shader();
 
-    static void event_callback(uv_fs_event_t* handle, const char*, int events, int) {
+    static void event_callback(uv_fs_event_t* handle, const char* path, int events, int) {
         App* a = (App*) handle->data;
         if (events & UV_CHANGE) {
             uv_fs_event_stop(handle);
@@ -96,6 +135,9 @@ private:
         }
     }
 
+    glm::vec3 m_pos = { 2.285664, 3.737782, -8.859721 };
+    float m_x_ang = 0.3;
+    float m_y_ang = -0.34;
 
     struct Variable {
         std::string name;
@@ -107,7 +149,7 @@ private:
 
     char const*           m_path;
     uv_loop_t*            m_loop;
-    uv_fs_event_t         m_handle{.data = this};
+    uv_fs_event_t         m_handle;
     std::vector<Variable> m_variables;
     gfx::Shader*          m_shader = nullptr;
 
@@ -216,19 +258,40 @@ void App::load_shader() {
         buf << c;
     }
 
-    std::stringstream code;
-    code << "#version 130\n"
+    int prelines = 6;
+    std::stringstream ss;
+    ss << "#version 130\n"
+            "uniform vec3 iPos;\n"
+            "uniform mat3 iEye;\n"
             "uniform float iTime;\n"
             "uniform float iFrame;\n"
             "uniform vec2 iResolution;\n";
     for (Variable const& v : m_variables) {
-        if (v.active) code << "uniform float _" << v.name << ";\n";
+        if (v.active) ss << "uniform float _" << v.name << ";\n";
+        ++prelines;
     }
-
-    code << buf.str();
-    m_shader = gfx::Shader::create(nullptr, code.str().c_str());
-
-    printf("done\n");
+    ss << buf.str();
+    std::string code = ss.str();
+    try {
+        m_shader = gfx::Shader::create(nullptr, code.c_str());
+        printf("done.\n");
+    }
+    catch (std::runtime_error const& e) {
+        const char* msg = e.what();
+        while (*msg) {
+            const char* c = msg;
+            while (*c && *c != '0') ++c;
+            while (*c && *c == '0') ++c;
+            while (*c && (*c < '0' || *c > '9')) ++c;
+            char* d;
+            int line = strtol(c, &d, 10);
+            c = d;
+            while (*d && *d != '\n') ++d;
+            printf("%d%.*s\n", line - prelines, int(d - c), c);
+            if (*d == '\n') ++d;
+            msg = d;
+        }
+    }
 }
 
 

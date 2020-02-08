@@ -2,6 +2,7 @@
 #include "fx.hpp"
 #include <array>
 #include <variant>
+#include <stdexcept>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <GL/glew.h>
@@ -287,24 +288,22 @@ GLuint compile_shader(uint32_t type, const char* src) {
     glGetShaderiv(s, GL_INFO_LOG_LENGTH, &len);
     char log[len];
     glGetShaderInfoLog(s, len, &len, log);
-    fprintf(stderr, "Error: can't compile shader\n%s\n%s\n", src, log);
     glDeleteShader(s);
+    throw std::runtime_error(std::string(log));
     return 0;
 }
 
 struct ShaderImpl : Shader {
 
-    bool init(const char* vs, const char* fs) {
+    void init(const char* vs, const char* fs) {
         m_program = glCreateProgram();
         if (vs) {
             GLint v = compile_shader(GL_VERTEX_SHADER, vs);
-            if (v == 0) return false;
             glAttachShader(m_program, v);
             glDeleteShader(v);
         }
         {
             GLint f = compile_shader(GL_FRAGMENT_SHADER, fs);
-            if (f == 0) return false;
             glAttachShader(m_program, f);
             glDeleteShader(f);
         }
@@ -346,8 +345,6 @@ struct ShaderImpl : Shader {
                 assert(false);
             }
         }
-
-        return true;
     }
 
     ~ShaderImpl() override {
@@ -516,7 +513,7 @@ VertexArray* VertexArray::create() {
 
 Shader* Shader::create(const char* vs, const char* fs) {
     auto s = new ShaderImpl;
-    if (!s->init(vs, fs)) return nullptr;
+    s->init(vs, fs);
     return s;
 }
 
