@@ -15,6 +15,21 @@ public:
     void init() override {
         gui::init();
 
+        m_scale_fb = gfx::Framebuffer::create();
+        m_scale_shader = gfx::Shader::create(R"(#version 130
+void main() {
+    gl_Position = gl_Vertex;
+}
+)", R"(#version 130
+uniform sampler2D tex;
+uniform vec2 scale;
+void main() {
+//    gl_FragColor = texture2D(tex, gl_FragCoord.xy / vec2(800.0, 600.0));
+    gl_FragColor = texture2D(tex, gl_FragCoord.xy * scale);
+}
+)");
+        init_scale_canvas();
+
         m_vb = gfx::VertexBuffer::create(gfx::BufferHint::StaticDraw);
         m_va = gfx::VertexArray::create();
         m_va->set_primitive_type(gfx::PrimitiveType::TriangleStrip);
@@ -37,18 +52,46 @@ public:
         uv_fs_event_start(&m_handle, &event_callback, m_path, 0);
     }
 
+    void init_scale_canvas() {
+        if (m_scale_canvas) delete m_scale_canvas;
+        m_scale_canvas = gfx::Texture2D::create(gfx::TextureFormat::RGB,
+                                                fx::screen_width() / m_scale,
+                                                fx::screen_height() / m_scale);
+        m_scale_fb->attach_color(m_scale_canvas);
+        m_scale_shader->set_uniform("tex", m_scale_canvas);
+        m_scale_shader->set_uniform("scale", 1.0f / glm::vec2(fx::screen_width(), fx::screen_height()));
+    }
+
+
     void free() override {
         uv_loop_close(m_loop);
         gui::free();
         delete m_va;
         delete m_vb;
         delete m_shader;
+
+        delete m_scale_canvas;
+        delete m_scale_fb;
+        delete m_scale_shader;
     }
 
     void process_event(SDL_Event const& e) override {
         gui::process_event(e);
     }
 
+    void resized() override {
+        init_scale_canvas();
+    }
+
+    void key(int code) override {
+        if (code == SDL_SCANCODE_RETURN) {
+            printf("%f, %f, %f | %f, %f\n", m_pos.x, m_pos.y, m_pos.z, m_x_ang, m_y_ang);
+        }
+        int old_scale = m_scale;
+        if (code == SDL_SCANCODE_EQUALS) ++m_scale;
+        if (code == SDL_SCANCODE_MINUS) m_scale = std::max(1, m_scale - 1);
+        if (m_scale != old_scale) init_scale_canvas();
+    }
 
     void update() override {
         uv_run(m_loop, UV_RUN_NOWAIT);
@@ -81,10 +124,6 @@ public:
         };
         m_pos += eye * mov * 0.1f;
 
-        if (mov != glm::vec3()) {
-            printf("%f, %f, %f | %f, %f\n",
-                    m_pos.x, m_pos.y, m_pos.z, m_x_ang, m_y_ang);
-        }
 
         if (m_shader->has_uniform("iPos")) {
             m_shader->set_uniform("iPos", m_pos);
@@ -93,7 +132,8 @@ public:
             m_shader->set_uniform("iEye", eye);
         }
         if (m_shader->has_uniform("iResolution")) {
-            m_shader->set_uniform("iResolution", glm::vec2(fx::screen_width(), fx::screen_height()));
+            m_shader->set_uniform("iResolution", glm::vec2(m_scale_canvas->get_width(),
+                                                           m_scale_canvas->get_height()));
         }
         if (m_shader->has_uniform("iFrame")) {
             m_shader->set_uniform("iFrame", float(m_frame));
@@ -115,8 +155,12 @@ public:
             }
         }
 
+        gfx::draw(m_rs, m_shader, m_va, m_scale_fb);
+
         gfx::clear({0, 0, 0, 1});
-        gfx::draw(m_rs, m_shader, m_va);
+        gfx::draw(m_rs, m_scale_shader, m_va);
+
+
         gui::render();
     }
 
@@ -157,6 +201,11 @@ private:
     gfx::RenderState   m_rs;
     gfx::VertexArray*  m_va = nullptr;
     gfx::VertexBuffer* m_vb = nullptr;
+
+    int                m_scale        = 2;
+    gfx::Texture2D*    m_scale_canvas = nullptr;
+    gfx::Framebuffer*  m_scale_fb     = nullptr;
+    gfx::Shader*       m_scale_shader = nullptr;
 };
 
 
@@ -256,12 +305,13 @@ void App::load_shader() {
 
     int prelines = 6;
     std::stringstream ss;
-    ss << "#version 130\n"
-            "uniform vec3 iPos;\n"
-            "uniform mat3 iEye;\n"
-            "uniform float iTime;\n"
-            "uniform float iFrame;\n"
-            "uniform vec2 iResolution;\n";
+    ss << R"(#version 130
+uniform vec3 iPos;
+uniform mat3 iEye;
+uniform float iTime;
+uniform float iFrame;
+uniform vec2 iResolution;
+)";
     for (Variable const& v : m_variables) {
         ss << "uniform float _" << v.name << ";\n";
         ++prelines;
