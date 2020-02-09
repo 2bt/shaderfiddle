@@ -1,4 +1,5 @@
-#define        E        0.001
+#define E  0.001
+#define PI 3.141592653589793
 
 float smin(float a, float b) {
     return min(a, b) - pow(max(0, 1.0 - abs(a - b)) * $k(0, 0.1), $smooth);
@@ -98,11 +99,16 @@ vec3 rand3dTo3d(vec3 value) {
         rand3dTo1d(value, vec3(73.156, 52.235,  9.151))
     );
 }
-//Vector3 Sample::UniformSampleHemisphere(float u1, float u2) {
-//    const float r = Sqrt(1.0f - u1 * u1);
-//    const float phi = 2 * kPi * u2;
-//    return Vector3(Cos(phi) * r, Sin(phi) * r, u1);
-//}
+
+vec3 rand_dir(vec3 p) {
+    vec3 v;
+    for (int i = 0; i < 4; ++i) {
+        v = rand3dTo3d(p + vec3(i)) * 2.0 - vec3(1.0);
+        if (dot(v, v) < 1.01) break;
+    }
+    return normalize(v);
+}
+
 
 vec3 trace(vec3 o, vec3 d) {
     vec3 light = normalize(vec3(1.0, 3.0, -2.0));
@@ -125,7 +131,7 @@ vec3 trace(vec3 o, vec3 d) {
                 break;
             }
 
-            vec3 r = normalize(rand3dTo3d(p) - vec3(0.5));
+            vec3 r = rand_dir(p);
             if (dot(n, r) < 0.0) r = -r;
             d = r;
             o = p + n * E;

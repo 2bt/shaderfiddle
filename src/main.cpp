@@ -179,7 +179,7 @@ void App::update() {
     };
     m_pos += eye * mov * 0.1f;
 
-    bool moved = m_pos != old_pos || m_ang != old_ang;
+    bool clear_channels = m_pos != old_pos || m_ang != old_ang || ks[SDL_SCANCODE_RETURN];
 
 
     for (Variable& v : m_variables) v.rendered = false;
@@ -220,7 +220,7 @@ void App::update() {
         }
 
         m_framebuffer->attach_color(m_channels[index]);
-        if (moved) gfx::clear({}, m_framebuffer);
+        if (clear_channels) gfx::clear({}, m_framebuffer);
         gfx::draw(m_rs, shader, m_va, m_framebuffer);
     }
 
