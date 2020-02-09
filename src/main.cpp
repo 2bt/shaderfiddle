@@ -12,56 +12,7 @@ class App : public fx::App {
 public:
     App(char* const path) : m_path(path) {}
 
-    void init() override {
-        gui::init();
-
-        m_scale_fb = gfx::Framebuffer::create();
-        m_scale_shader = gfx::Shader::create(R"(#version 130
-void main() {
-    gl_Position = gl_Vertex;
-}
-)", R"(#version 130
-uniform sampler2D tex;
-uniform vec2 scale;
-void main() {
-//    gl_FragColor = texture2D(tex, gl_FragCoord.xy / vec2(800.0, 600.0));
-    gl_FragColor = texture2D(tex, gl_FragCoord.xy * scale);
-}
-)");
-        init_scale_canvas();
-
-        m_vb = gfx::VertexBuffer::create(gfx::BufferHint::StaticDraw);
-        m_va = gfx::VertexArray::create();
-        m_va->set_primitive_type(gfx::PrimitiveType::TriangleStrip);
-        m_va->set_attribute(0, m_vb, gfx::ComponentType::Float, 2, false, 0, sizeof(glm::vec2));
-
-        std::vector<glm::vec2> v = {
-           { -1, -1 },
-           {  1, -1 },
-           { -1,  1 },
-           {  1,  1 },
-        };
-        m_vb->init_data(v);
-        m_va->set_count(v.size());
-
-        load_shader();
-        m_handle.data = this;
-
-        m_loop = uv_default_loop();
-        uv_fs_event_init(m_loop, &m_handle);
-        uv_fs_event_start(&m_handle, &event_callback, m_path, 0);
-    }
-
-    void init_scale_canvas() {
-        if (m_scale_canvas) delete m_scale_canvas;
-        m_scale_canvas = gfx::Texture2D::create(gfx::TextureFormat::RGB,
-                                                fx::screen_width() / m_scale,
-                                                fx::screen_height() / m_scale);
-        m_scale_fb->attach_color(m_scale_canvas);
-        m_scale_shader->set_uniform("tex", m_scale_canvas);
-        m_scale_shader->set_uniform("scale", 1.0f / glm::vec2(fx::screen_width(), fx::screen_height()));
-    }
-
+    void init() override;
 
     void free() override {
         uv_loop_close(m_loop);
@@ -93,81 +44,12 @@ void main() {
         if (m_scale != old_scale) init_scale_canvas();
     }
 
-    void update() override {
-        uv_run(m_loop, UV_RUN_NOWAIT);
-        if (!m_shader) return;
-        ++m_frame;
-
-        const Uint8* ks = SDL_GetKeyboardState(nullptr);
-        m_y_ang += (ks[SDL_SCANCODE_RIGHT] - ks[SDL_SCANCODE_LEFT]) * 0.02f;
-        m_x_ang += (ks[SDL_SCANCODE_DOWN] - ks[SDL_SCANCODE_UP]) * 0.02f;
-
-        float cy = cosf(m_y_ang);
-        float sy = sinf(m_y_ang);
-        float cx = cosf(m_x_ang);
-        float sx = sinf(m_x_ang);
-
-        glm::mat3 eye = glm::mat3{
-            cy, 0, -sy,
-            0, 1, 0,
-            sy, 0, cy,
-        } * glm::mat3{
-            1, 0, 0,
-            0, cx, sx,
-            0, -sx, cx,
-        };
-
-        glm::vec3 mov = {
-            ks[SDL_SCANCODE_D]     - ks[SDL_SCANCODE_A],
-            ks[SDL_SCANCODE_SPACE] - ks[SDL_SCANCODE_LSHIFT],
-            ks[SDL_SCANCODE_W]     - ks[SDL_SCANCODE_S],
-        };
-        m_pos += eye * mov * 0.1f;
-
-
-        if (m_shader->has_uniform("iPos")) {
-            m_shader->set_uniform("iPos", m_pos);
-        }
-        if (m_shader->has_uniform("iEye")) {
-            m_shader->set_uniform("iEye", eye);
-        }
-        if (m_shader->has_uniform("iResolution")) {
-            m_shader->set_uniform("iResolution", glm::vec2(m_scale_canvas->get_width(),
-                                                           m_scale_canvas->get_height()));
-        }
-        if (m_shader->has_uniform("iFrame")) {
-            m_shader->set_uniform("iFrame", float(m_frame));
-        }
-        if (m_shader->has_uniform("iTime")) {
-            m_shader->set_uniform("iTime", (SDL_GetTicks() - m_start_time) * 0.001f);
-        }
-
-
-        gui::new_frame();
-        gui::set_next_window_pos({5, 5});
-        gui::begin_window("Variables");
-
-        for (Variable& v : m_variables) {
-            std::string u = "_" + v.name;
-            if (m_shader->has_uniform(u)) {
-                gui::drag_float(v.name.c_str(), v.val, 1, v.min, v.max);
-                m_shader->set_uniform(u, v.val);
-            }
-        }
-
-        gfx::draw(m_rs, m_shader, m_va, m_scale_fb);
-
-        gfx::clear({0, 0, 0, 1});
-        gfx::draw(m_rs, m_scale_shader, m_va);
-
-
-        gui::render();
-    }
-
+    void update() override;
 
 private:
 
     void load_shader();
+    void init_scale_canvas();
 
     static void event_callback(uv_fs_event_t* handle, const char* path, int events, int) {
         App* a = (App*) handle->data;
@@ -179,7 +61,7 @@ private:
     }
 
     glm::vec3 m_pos = { 2.285664, 3.737782, -8.859721 };
-    float m_x_ang = 0.3;
+    float m_x_ang = 0.08;
     float m_y_ang = -0.34;
 
     struct Variable {
@@ -207,6 +89,131 @@ private:
     gfx::Framebuffer*  m_scale_fb     = nullptr;
     gfx::Shader*       m_scale_shader = nullptr;
 };
+
+
+void App::init() {
+    gui::init();
+
+    m_scale_fb = gfx::Framebuffer::create();
+    m_scale_shader = gfx::Shader::create(R"(#version 130
+void main() {
+gl_Position = gl_Vertex;
+}
+)", R"(#version 130
+uniform sampler2D tex;
+uniform vec2 scale;
+void main() {
+//    gl_FragColor = texture2D(tex, gl_FragCoord.xy / vec2(800.0, 600.0));
+gl_FragColor = texture2D(tex, gl_FragCoord.xy * scale);
+}
+)");
+    init_scale_canvas();
+
+    m_vb = gfx::VertexBuffer::create(gfx::BufferHint::StaticDraw);
+    m_va = gfx::VertexArray::create();
+    m_va->set_primitive_type(gfx::PrimitiveType::TriangleStrip);
+    m_va->set_attribute(0, m_vb, gfx::ComponentType::Float, 2, false, 0, sizeof(glm::vec2));
+
+    std::vector<glm::vec2> v = {
+       { -1, -1 },
+       {  1, -1 },
+       { -1,  1 },
+       {  1,  1 },
+    };
+    m_vb->init_data(v);
+    m_va->set_count(v.size());
+
+    load_shader();
+    m_handle.data = this;
+
+    m_loop = uv_default_loop();
+    uv_fs_event_init(m_loop, &m_handle);
+    uv_fs_event_start(&m_handle, &event_callback, m_path, 0);
+}
+
+void App::init_scale_canvas() {
+    if (m_scale_canvas) delete m_scale_canvas;
+    m_scale_canvas = gfx::Texture2D::create(gfx::TextureFormat::RGB,
+                                            fx::screen_width() / m_scale,
+                                            fx::screen_height() / m_scale,
+                                            nullptr,
+                                            gfx::FilterMode::Linear);
+    m_scale_fb->attach_color(m_scale_canvas);
+    m_scale_shader->set_uniform("tex", m_scale_canvas);
+    m_scale_shader->set_uniform("scale", 1.0f / glm::vec2(fx::screen_width(), fx::screen_height()));
+}
+
+
+void App::update() {
+    uv_run(m_loop, UV_RUN_NOWAIT);
+    if (!m_shader) return;
+    ++m_frame;
+
+    const Uint8* ks = SDL_GetKeyboardState(nullptr);
+    m_y_ang += (ks[SDL_SCANCODE_RIGHT] - ks[SDL_SCANCODE_LEFT]) * 0.02f;
+    m_x_ang += (ks[SDL_SCANCODE_DOWN] - ks[SDL_SCANCODE_UP]) * 0.02f;
+
+    float cy = cosf(m_y_ang);
+    float sy = sinf(m_y_ang);
+    float cx = cosf(m_x_ang);
+    float sx = sinf(m_x_ang);
+
+    glm::mat3 eye = glm::mat3{
+        cy, 0, -sy,
+        0, 1, 0,
+        sy, 0, cy,
+    } * glm::mat3{
+        1, 0, 0,
+        0, cx, sx,
+        0, -sx, cx,
+    };
+
+    glm::vec3 mov = {
+        ks[SDL_SCANCODE_D]     - ks[SDL_SCANCODE_A],
+        ks[SDL_SCANCODE_SPACE] - ks[SDL_SCANCODE_LSHIFT],
+        ks[SDL_SCANCODE_W]     - ks[SDL_SCANCODE_S],
+    };
+    m_pos += eye * mov * 0.1f;
+
+
+    if (m_shader->has_uniform("iPos")) {
+        m_shader->set_uniform("iPos", m_pos);
+    }
+    if (m_shader->has_uniform("iEye")) {
+        m_shader->set_uniform("iEye", eye);
+    }
+    if (m_shader->has_uniform("iResolution")) {
+        m_shader->set_uniform("iResolution", glm::vec2(m_scale_canvas->get_width(),
+                                                       m_scale_canvas->get_height()));
+    }
+    if (m_shader->has_uniform("iFrame")) {
+        m_shader->set_uniform("iFrame", float(m_frame));
+    }
+    if (m_shader->has_uniform("iTime")) {
+        m_shader->set_uniform("iTime", (SDL_GetTicks() - m_start_time) * 0.001f);
+    }
+
+
+    gui::new_frame();
+    gui::set_next_window_pos({5, 5});
+    gui::begin_window("Variables");
+
+    for (Variable& v : m_variables) {
+        std::string u = "_" + v.name;
+        if (m_shader->has_uniform(u)) {
+            gui::drag_float(v.name.c_str(), v.val, 1, v.min, v.max);
+            m_shader->set_uniform(u, v.val);
+        }
+    }
+
+    gfx::draw(m_rs, m_shader, m_va, m_scale_fb);
+
+    gfx::clear({0, 0, 0, 1});
+    gfx::draw(m_rs, m_scale_shader, m_va);
+
+
+    gui::render();
+}
 
 
 void App::load_shader() {
