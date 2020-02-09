@@ -3,9 +3,19 @@
 #include "gui.hpp"
 #include <fstream>
 #include <sstream>
+#include <regex>
 #include <SDL2/SDL.h>
 #include <algorithm>
 #include <uv.h>
+
+
+struct Variable {
+    std::string name;
+    float       min;
+    float       max;
+    float       val;
+    bool        rendered;
+};
 
 
 class App : public fx::App {
@@ -19,10 +29,10 @@ public:
         gui::free();
         delete m_va;
         delete m_vb;
-        delete m_shader;
+        for (gfx::Shader* s : m_shaders) delete s;
+        for (gfx::Texture2D* c : m_channels) delete c;
 
-        delete m_scale_canvas;
-        delete m_scale_fb;
+        delete m_framebuffer;
         delete m_scale_shader;
     }
 
@@ -31,17 +41,17 @@ public:
     }
 
     void resized() override {
-        init_scale_canvas();
+        init_channels();
     }
 
     void key(int code) override {
         if (code == SDL_SCANCODE_RETURN) {
-            printf("%f, %f, %f | %f, %f\n", m_pos.x, m_pos.y, m_pos.z, m_x_ang, m_y_ang);
+            printf("%f, %f, %f | %f, %f\n", m_pos.x, m_pos.y, m_pos.z, m_ang.x, m_ang.y);
         }
         int old_scale = m_scale;
         if (code == SDL_SCANCODE_EQUALS) ++m_scale;
         if (code == SDL_SCANCODE_MINUS) m_scale = std::max(1, m_scale - 1);
-        if (m_scale != old_scale) init_scale_canvas();
+        if (m_scale != old_scale) init_channels();
     }
 
     void update() override;
@@ -49,7 +59,7 @@ public:
 private:
 
     void load_shader();
-    void init_scale_canvas();
+    void init_channels();
 
     static void event_callback(uv_fs_event_t* handle, const char* path, int events, int) {
         App* a = (App*) handle->data;
@@ -61,32 +71,25 @@ private:
     }
 
     glm::vec3 m_pos = { 2.285664, 3.737782, -8.859721 };
-    float m_x_ang = 0.08;
-    float m_y_ang = -0.34;
-
-    struct Variable {
-        std::string name;
-        float       min;
-        float       max;
-        float       val;
-    };
+    glm::vec2 m_ang = { 0.08, -0.34 };
 
     char const*           m_path;
     uv_loop_t*            m_loop;
     uv_fs_event_t         m_handle;
-    std::vector<Variable> m_variables;
-    gfx::Shader*          m_shader = nullptr;
 
-    uint32_t m_start_time = SDL_GetTicks();
-    uint32_t m_frame      = 0;
+    std::vector<Variable> m_variables;
+    uint32_t              m_start_time = SDL_GetTicks();
+    uint32_t              m_frame      = 0;
+
+    std::array<gfx::Shader*, 4>     m_shaders  = {};
+    std::array<gfx::Texture2D*, 4>  m_channels = {};
 
     gfx::RenderState   m_rs;
     gfx::VertexArray*  m_va = nullptr;
     gfx::VertexBuffer* m_vb = nullptr;
 
-    int                m_scale        = 2;
-    gfx::Texture2D*    m_scale_canvas = nullptr;
-    gfx::Framebuffer*  m_scale_fb     = nullptr;
+    int                m_scale        = 1;
+    gfx::Framebuffer*  m_framebuffer  = nullptr;
     gfx::Shader*       m_scale_shader = nullptr;
 };
 
@@ -94,20 +97,20 @@ private:
 void App::init() {
     gui::init();
 
-    m_scale_fb = gfx::Framebuffer::create();
+    m_framebuffer = gfx::Framebuffer::create();
     m_scale_shader = gfx::Shader::create(R"(#version 130
 void main() {
-gl_Position = gl_Vertex;
+    gl_Position = gl_Vertex;
 }
 )", R"(#version 130
 uniform sampler2D tex;
 uniform vec2 scale;
 void main() {
-//    gl_FragColor = texture2D(tex, gl_FragCoord.xy / vec2(800.0, 600.0));
-gl_FragColor = texture2D(tex, gl_FragCoord.xy * scale);
+    gl_FragColor = texture2D(tex, gl_FragCoord.xy * scale);
 }
 )");
-    init_scale_canvas();
+
+    init_channels();
 
     m_vb = gfx::VertexBuffer::create(gfx::BufferHint::StaticDraw);
     m_va = gfx::VertexArray::create();
@@ -131,32 +134,33 @@ gl_FragColor = texture2D(tex, gl_FragCoord.xy * scale);
     uv_fs_event_start(&m_handle, &event_callback, m_path, 0);
 }
 
-void App::init_scale_canvas() {
-    if (m_scale_canvas) delete m_scale_canvas;
-    m_scale_canvas = gfx::Texture2D::create(gfx::TextureFormat::RGB,
-                                            fx::screen_width() / m_scale,
-                                            fx::screen_height() / m_scale,
-                                            nullptr,
-                                            gfx::FilterMode::Linear);
-    m_scale_fb->attach_color(m_scale_canvas);
-    m_scale_shader->set_uniform("tex", m_scale_canvas);
-    m_scale_shader->set_uniform("scale", 1.0f / glm::vec2(fx::screen_width(), fx::screen_height()));
+void App::init_channels() {
+    for (gfx::Texture2D*& c : m_channels) {
+        delete c;
+        c = gfx::Texture2D::create(gfx::TextureFormat::RGBA32F,
+                                   fx::screen_width() / m_scale,
+                                   fx::screen_height() / m_scale,
+                                   nullptr,
+                                   gfx::FilterMode::Linear);
+    }
 }
 
 
 void App::update() {
     uv_run(m_loop, UV_RUN_NOWAIT);
-    if (!m_shader) return;
     ++m_frame;
 
-    const Uint8* ks = SDL_GetKeyboardState(nullptr);
-    m_y_ang += (ks[SDL_SCANCODE_RIGHT] - ks[SDL_SCANCODE_LEFT]) * 0.02f;
-    m_x_ang += (ks[SDL_SCANCODE_DOWN] - ks[SDL_SCANCODE_UP]) * 0.02f;
+    glm::vec3 old_pos = m_pos;
+    glm::vec2 old_ang = m_ang;
 
-    float cy = cosf(m_y_ang);
-    float sy = sinf(m_y_ang);
-    float cx = cosf(m_x_ang);
-    float sx = sinf(m_x_ang);
+    const Uint8* ks = SDL_GetKeyboardState(nullptr);
+    m_ang.x += (ks[SDL_SCANCODE_DOWN]  - ks[SDL_SCANCODE_UP]) * 0.02f;
+    m_ang.y += (ks[SDL_SCANCODE_RIGHT] - ks[SDL_SCANCODE_LEFT]) * 0.02f;
+
+    float cy = cosf(m_ang.y);
+    float sy = sinf(m_ang.y);
+    float cx = cosf(m_ang.x);
+    float sx = sinf(m_ang.x);
 
     glm::mat3 eye = glm::mat3{
         cy, 0, -sy,
@@ -175,45 +179,97 @@ void App::update() {
     };
     m_pos += eye * mov * 0.1f;
 
+    bool moved = m_pos != old_pos || m_ang != old_ang;
 
-    if (m_shader->has_uniform("iPos")) {
-        m_shader->set_uniform("iPos", m_pos);
-    }
-    if (m_shader->has_uniform("iEye")) {
-        m_shader->set_uniform("iEye", eye);
-    }
-    if (m_shader->has_uniform("iResolution")) {
-        m_shader->set_uniform("iResolution", glm::vec2(m_scale_canvas->get_width(),
-                                                       m_scale_canvas->get_height()));
-    }
-    if (m_shader->has_uniform("iFrame")) {
-        m_shader->set_uniform("iFrame", float(m_frame));
-    }
-    if (m_shader->has_uniform("iTime")) {
-        m_shader->set_uniform("iTime", (SDL_GetTicks() - m_start_time) * 0.001f);
-    }
 
+    for (Variable& v : m_variables) v.rendered = false;
 
     gui::new_frame();
     gui::set_next_window_pos({5, 5});
     gui::begin_window("Variables");
 
-    for (Variable& v : m_variables) {
-        std::string u = "_" + v.name;
-        if (m_shader->has_uniform(u)) {
-            gui::drag_float(v.name.c_str(), v.val, 1, v.min, v.max);
-            m_shader->set_uniform(u, v.val);
+    int index = -1;
+    for (gfx::Shader* shader : m_shaders) {
+        if (!shader) break;
+        ++index;
+
+        if (shader->has_uniform("iPos")) shader->set_uniform("iPos", m_pos);
+        if (shader->has_uniform("iEye")) shader->set_uniform("iEye", eye);
+        if (shader->has_uniform("iResolution")) {
+            shader->set_uniform("iResolution", glm::vec2(m_channels[0]->get_width(),
+                                                         m_channels[0]->get_height()));
         }
+        if (shader->has_uniform("iFrame")) shader->set_uniform("iFrame", float(m_frame));
+        if (shader->has_uniform("iTime")) {
+            shader->set_uniform("iTime", (SDL_GetTicks() - m_start_time) * 0.001f);
+        }
+        if (shader->has_uniform("iChannel0")) shader->set_uniform("iChannel0", m_channels[0]);
+        if (shader->has_uniform("iChannel1")) shader->set_uniform("iChannel1", m_channels[1]);
+        if (shader->has_uniform("iChannel2")) shader->set_uniform("iChannel2", m_channels[2]);
+        if (shader->has_uniform("iChannel3")) shader->set_uniform("iChannel3", m_channels[3]);
+
+        for (Variable& v : m_variables) {
+            std::string u = "_" + v.name;
+            if (shader->has_uniform(u)) {
+                shader->set_uniform(u, v.val);
+                if (!v.rendered) {
+                    gui::drag_float(v.name.c_str(), v.val, 1, v.min, v.max);
+                    v.rendered = true;
+                }
+            }
+        }
+
+        m_framebuffer->attach_color(m_channels[index]);
+        if (moved) gfx::clear({}, m_framebuffer);
+        gfx::draw(m_rs, shader, m_va, m_framebuffer);
     }
 
-    gfx::draw(m_rs, m_shader, m_va, m_scale_fb);
 
-    gfx::clear({0, 0, 0, 1});
-    gfx::draw(m_rs, m_scale_shader, m_va);
-
+    if (index >= 0) {
+        gfx::clear({0, 0, 0, 0});
+        m_framebuffer->attach_color(m_channels[index]);
+        m_scale_shader->set_uniform("tex", m_channels[index]);
+        m_scale_shader->set_uniform("scale", 1.0f / glm::vec2(fx::screen_width(), fx::screen_height()));
+        gfx::draw(m_rs, m_scale_shader, m_va);
+    }
 
     gui::render();
 }
+
+
+class Parser {
+public:
+    Parser(std::istream& input) : m_input(input) {}
+
+    template <class Func>
+    std::string parse_shader(Func const& func) {
+        std::stringstream ss;
+        std::string line;
+        while (std::getline(m_input, line)) {
+            ++m_line_count;
+            if (line == "---") break;
+            static const std::regex var_reg(R"(\$(\w+)(\(([^,]+),([^)]+)\))?)");
+            std::smatch match;
+            while (std::regex_search(line, match, var_reg)) {
+                ss << match.prefix();
+                ss << '_' << match[1];
+                Variable var { match[1], 0, 1, 0.5f };
+                if (match[2].length() > 0) {
+                    var.min = std::stof(match[3]);
+                    var.max = std::stof(match[4]);
+                    var.val = (var.min + var.max) * 0.5f;
+                }
+                func(var);
+                line = match.suffix();
+            }
+            ss << line << '\n';
+        }
+        return ss.str();
+    }
+private:
+    int           m_line_count = 0;
+    std::istream& m_input;
+};
 
 
 void App::load_shader() {
@@ -225,126 +281,79 @@ void App::load_shader() {
         return;
     }
 
-    if (m_shader) delete m_shader;
-    m_shader = nullptr;
-
-    std::stringstream buf;
-    char c;
-
-    // helper functions for parsing
-    auto expect = [&c, &file](char e){
-        if (c != e) throw std::logic_error("invalid token");
-        file.get(c);
-    };
-    auto parse_number = [&c, &file](){
-        std::string s;
-        while (isspace(c)) file.get(c);
-        if (c == '-') {
-            s += '-';
-            file.get(c);
-        }
-        while (isalnum(c)) {
-            s += c;
-            file.get(c);
-        }
-        if (c == '.') {
-            s += '.';
-            file.get(c);
-            while (isalnum(c)) {
-                s += c;
-                file.get(c);
-            }
-        }
-        while (isspace(c)) file.get(c);
-        if (s.empty()) throw std::logic_error("cannot parse number");
-        return std::stof(s);
-    };
-
-
-
-    while (file.get(c)) {
-        // find $variables
-        if (c == '$') {
-            Variable var { "", 0, 1, 0.5 };
-            while (file.get(c) && (isalnum(c) || c == '_')) var.name += c;
-            if (var.name.empty()) {
-                printf("variable error: name empty\n");
-                return;
-            }
-
-            // check for optional (min,max)
-            if (c == '(') {
-                file.get(c);
-                try {
-                    var.min = parse_number();
-                    expect(',');
-                    var.max = parse_number();
-                    var.val = (var.min + var.max) * 0.5;
-                    if (c == '.') {
-                        file.get(c);
-                        var.val = parse_number();
-                    }
-                    expect(')');
-                }
-                catch (std::logic_error const& e){
-                    printf("variable error: %s\n", e.what());
-                    return;
-                }
-            }
-
-            // allocate variable
-            auto it = std::find_if(m_variables.begin(), m_variables.end(), [&var](auto& v) {
-                return v.name == var.name;
-            });
-            if (it != m_variables.end()) {
-                if (var.min != 0 || var.max != 1) {
-                    var.val = it->val;
-                    *it = var;
-                }
-            }
-            else m_variables.emplace_back(var);
-
-            buf << "_" << var.name;
-        }
-
-        buf << c;
+    for (gfx::Shader*& s : m_shaders) {
+        delete s;
+        s = nullptr;
     }
 
-    int prelines = 6;
-    std::stringstream ss;
-    ss << R"(#version 130
+    try {
+        Parser parser(file);
+        for (int i = 0; i < 4; ++i) {
+            std::string code = parser.parse_shader([this](Variable var) {
+                auto it = std::find_if(m_variables.begin(), m_variables.end(), [&var](auto& v) {
+                    return v.name == var.name;
+                });
+                if (it != m_variables.end()) {
+                    if (var.min != 0 || var.max != 1) {
+                        var.val = it->val;
+                        *it = var;
+                    }
+                }
+                else m_variables.emplace_back(var);
+            });
+            if (code.empty()) break;
+
+            int prelines = 10;
+            std::stringstream ss;
+            ss << R"(#version 130
 uniform vec3 iPos;
 uniform mat3 iEye;
 uniform float iTime;
 uniform float iFrame;
 uniform vec2 iResolution;
+uniform sampler2D iChannel0;
+uniform sampler2D iChannel1;
+uniform sampler2D iChannel2;
+uniform sampler2D iChannel3;
 )";
-    for (Variable const& v : m_variables) {
-        ss << "uniform float _" << v.name << ";\n";
-        ++prelines;
-    }
-    ss << buf.str();
-    std::string code = ss.str();
-    try {
-        m_shader = gfx::Shader::create(nullptr, code.c_str());
-        printf("done.\n");
-    }
-    catch (std::runtime_error const& e) {
-        const char* msg = e.what();
-        while (*msg) {
-            const char* c = msg;
-            while (*c && *c != '0') ++c;
-            while (*c && *c == '0') ++c;
-            while (*c && (*c < '0' || *c > '9')) ++c;
-            char* d;
-            int line = strtol(c, &d, 10);
-            c = d;
-            while (*d && *d != '\n') ++d;
-            printf("%d%.*s\n", line - prelines, int(d - c), c);
-            if (*d == '\n') ++d;
-            msg = d;
+            for (Variable const& v : m_variables) {
+                ss << "uniform float _" << v.name << ";\n";
+                ++prelines;
+            }
+            ss << code;
+            code = ss.str();
+
+            try {
+                m_shaders[i] = gfx::Shader::create(nullptr, code.c_str());
+                printf("done.\n");
+            }
+            catch (std::runtime_error const& e) {
+                const char* msg = e.what();
+                while (*msg) {
+                    const char* c = msg;
+                    while (*c && *c != '0') ++c;
+                    while (*c && *c == '0') ++c;
+                    while (*c && (*c < '0' || *c > '9')) ++c;
+                    char* d;
+                    int line = strtol(c, &d, 10);
+                    c = d;
+                    while (*d && *d != '\n') ++d;
+                    printf("%d%.*s\n", line - prelines, int(d - c), c);
+                    if (*d == '\n') ++d;
+                    msg = d;
+                }
+            }
         }
     }
+    catch (std::logic_error const& e) {
+        printf("ERROR: %s\n", e.what());
+        for (gfx::Shader*& s : m_shaders) {
+            delete s;
+            s = nullptr;
+        }
+        return;
+    }
+
 }
 
 

@@ -8,21 +8,42 @@ float smin(float a, float b) {
 	return min(a, b);
 }
 
+float max3(vec3 v) {
+    return max(max(v.x, v.y), v.z);
+}
+
+float box(vec3 p, vec3 s) {
+    return max3(abs(p) - s);
+    return length(p) - 1.0;
+}
+
+void rot(inout vec2 p, float v) {
+    float si = sin(v);
+    float co = cos(v);
+    p = vec2(co * p.x + si * p.y, co * p.y - si * p.x);
+}
+
 float map(vec3 p) {
 
     float time = iTime * $time_factor + $time_offset(0, 10);
 
     float d = min(p.y + 3.0, 2.0 - p.z);
 
-	d = min(d,
-		smin(
-			length(
-				p + vec3(sin(time * 1.1) * 4.9,
-				cos(time * 0.9) * 1.8 + 0.4,
-				0.5 + cos(time * 2.1) * 0.5)) - 1.3,
-			smin(
-				length(p) - 2.0,
-				length(p + vec3(sin(time * 1.3) * 4.2, cos(time * 1.3) * 1.3 + 0.4, 0.0)) - 2.0)));
+//	d = min(d,
+//		smin(
+//			length(
+//				p + vec3(sin(time * 1.1) * 4.9,
+//				cos(time * 0.9) * 1.8 + 0.4,
+//				0.5 + cos(time * 2.1) * 0.5)) - 1.3,
+//			smin(
+//				length(p) - 2.0,
+//				length(p + vec3(sin(time * 1.3) * 4.2, cos(time * 1.3) * 1.3 + 0.4, 0.0)) - 2.0)));
+
+
+    rot(p.xz, $r1(0, 10));
+    rot(p.xy, $r2(0, 10));
+    d = min(d, box(p, vec3(1.0, 1.0, 1.0)));
+
     return d;
 }
 

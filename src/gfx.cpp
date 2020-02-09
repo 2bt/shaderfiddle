@@ -54,7 +54,7 @@ constexpr uint32_t map_to_gl(CullFace cf) {
     return lut[static_cast<int>(cf)];
 }
 constexpr uint32_t map_to_gl(TextureFormat tf) {
-    constexpr uint32_t lut[] = { GL_RED, GL_RGB, GL_RGBA, GL_DEPTH_COMPONENT, GL_STENCIL_INDEX, GL_DEPTH_STENCIL };
+    constexpr uint32_t lut[] = { GL_RED, GL_RGB, GL_RGBA, GL_DEPTH_COMPONENT, GL_STENCIL_INDEX, GL_DEPTH_STENCIL, GL_RGBA32F };
     return lut[static_cast<int>(tf)];
 }
 constexpr uint32_t map_to_gl(WrapMode wm) {
@@ -251,7 +251,8 @@ struct Texture2DImpl : Texture2D {
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, map_to_gl(wrap));
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, map_to_gl(wrap));
             glTexImage2D(GL_TEXTURE_2D, 0, map_to_gl(format),
-                         m_width, m_height, 0, map_to_gl(format),
+//                         m_width, m_height, 0, map_to_gl(format),
+                         m_width, m_height, 0, GL_RED,
                          GL_UNSIGNED_BYTE, data);
         }
 

@@ -27,16 +27,18 @@ float line2(vec2 p, vec2 a, vec2 b) {
 }
 
 float lines(vec3 p) {
+//    rot(p.xz, iTime);
+
     float d = 9e9;
-    d = min(d, line2(p.xy, vec2(-5.0, 3.0), vec2(-3.0, 5.0)));
-    d = min(d, line2(p.xy, vec2(-5.0, 3.0), vec2(0.0, 1.0)));
-    d = min(d, line2(p.xy, vec2(-3.0, 5.0), vec2(0.0, 1.0)));
+    d = min(d, line2(p.xy, vec2(-2.0, 3.0), vec2(0.0, 5.0)));
+    d = min(d, line2(p.xy, vec2(-2.0, 3.0), vec2(3.0, 1.0)));
+    d = min(d, line2(p.xy, vec2(0.0, 5.0), vec2(3.0, 1.0)));
 
     d = abs(d - $t);
 
 //    d = abs(d - 0.4);
 //    return pow(pow(d, 8.0 * $a(0,2)) + pow(z, 8.0 * $a(0,2)), .125 * $r(0,2)) - $t;
-    return max(d - 0.2, abs(p.z - 5.0) - 0.5);
+    return max(d - 0.2, abs(p.z) - 0.5);
 }
 
 vec2 mmin(vec2 a, vec2 b) {
@@ -55,17 +57,9 @@ vec2 mmax(vec2 a, vec2 b) {
 
 vec2 map(vec3 p) {
     vec2 d = vec2(-p.y + 10.0, M_SKY);
-
     d = mmin(d, vec2(-box(p + vec3(0.0, -10.0, 0.0), vec3(10.0, 10.0, 10.0)), M_WALL));
 
-//    d = mmin(d, vec2(box(vec3(mod(p.x - $q(-4, 4), 2.0) - 1.0, p.y - 1.0 - $y, p.z), vec3($w, 1.0, 1.0)), M_BOX));
-//    d = mmax(d, vec2(-box(vec3(mod(p.x - $q(-4, 4), 2.0) - 1.0, p.y - $y(-12, 12), p.z), vec3($w, 1.0, 1.0)), M_BOX));
-
     d = mmin(d, vec2(lines(p), M_BOX));
-
-//    rot(p.xz, $r1(0, 10));
-//    rot(p.xy, $r2(0, 10));
-//    d = mmin(d, vec2(box(p, vec3(1.0, 1.0, 1.0)), M_BOX));
 
 
     return d;
@@ -94,8 +88,8 @@ vec2 march(vec3 o, vec3 d) {
 }
 
 float rand3dTo1d(vec3 value, vec3 dotDir) {
-    float random = dot(sin(value), dotDir);
-    return fract(sin(random) * (143758.5453 + iFrame));
+    float random = dot(sin(value + iFrame), dotDir) + iFrame;
+    return fract(sin(random) * 143758.5453);
 }
 vec3 rand3dTo3d(vec3 value) {
     return vec3(
@@ -104,6 +98,11 @@ vec3 rand3dTo3d(vec3 value) {
         rand3dTo1d(value, vec3(73.156, 52.235,  9.151))
     );
 }
+//Vector3 Sample::UniformSampleHemisphere(float u1, float u2) {
+//    const float r = Sqrt(1.0f - u1 * u1);
+//    const float phi = 2 * kPi * u2;
+//    return Vector3(Cos(phi) * r, Sin(phi) * r, u1);
+//}
 
 vec3 trace(vec3 o, vec3 d) {
     vec3 light = normalize(vec3(1.0, 3.0, -2.0));
@@ -144,7 +143,7 @@ vec3 trace(vec3 o, vec3 d) {
 
 void main() {
 
-    int N = 4;
+    int N = 2;
     vec3 col = vec3(0.0);
     for (int i = 0; i < N; ++i) {
         vec3 dir = normalize(iEye * vec3((gl_FragCoord.xy + vec2(i / float(N))) / iResolution.x * 2.0 - vec2(1.0, iResolution.y / iResolution.x), 1.5));
@@ -152,7 +151,18 @@ void main() {
     }
 
     col /= N;
+
+    gl_FragColor = vec4(col, 1.0) + texelFetch(iChannel0, ivec2(gl_FragCoord.xy), 0);
+}
+
+---
+
+
+void main() {
+
+    vec4 d = texelFetch(iChannel0, ivec2(gl_FragCoord.xy), 0);
+    vec3 col = d.xyz / d.w;
     col /= col + vec3(1.0);
 
-    gl_FragColor.rgb = col;
+    gl_FragColor.rgba = vec4(col, 1.0);
 }

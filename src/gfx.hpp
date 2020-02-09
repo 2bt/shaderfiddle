@@ -121,7 +121,7 @@ enum class WrapMode { Clamp, Repeat, MirrowedRepeat };
 
 enum class FilterMode { Nearest, Linear, Trilinear };
 
-enum class TextureFormat { Red, RGB, RGBA, Depth, Stencil, DepthStencil };
+enum class TextureFormat { Red, RGB, RGBA, Depth, Stencil, DepthStencil, RGBA32F };
 
 struct Texture2D {
     static Texture2D* create(SDL_Surface* s, FilterMode filter = FilterMode::Nearest, WrapMode wrap = WrapMode::Clamp);
