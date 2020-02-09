@@ -148,17 +148,8 @@ vec3 trace(vec3 o, vec3 d) {
 
 
 void main() {
-
-    int N = 2;
-    vec3 col = vec3(0.0);
-    for (int i = 0; i < N; ++i) {
-        vec3 dir = normalize(iEye * vec3((gl_FragCoord.xy + vec2(i / float(N))) / iResolution.x * 2.0 - vec2(1.0, iResolution.y / iResolution.x), 1.5));
-        col += trace(iPos, dir);
-    }
-
-    col /= N;
-
-    gl_FragColor = vec4(col, 1.0) + texelFetch(iChannel0, ivec2(gl_FragCoord.xy), 0);
+    vec3 dir = normalize(iEye * vec3(gl_FragCoord.xy / iResolution.x * 2.0 - vec2(1.0, iResolution.y / iResolution.x), 1.5));
+    gl_FragColor = vec4(trace(iPos, dir), 1.0) + texelFetch(iChannel0, ivec2(gl_FragCoord.xy), 0);
 }
 
 ---
