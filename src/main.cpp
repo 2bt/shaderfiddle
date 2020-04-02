@@ -193,13 +193,8 @@ void App::update() {
     gui::new_frame();
     gui::set_next_window_pos({5, 5});
     gui::begin_window("Variables");
-
-    bool values_changed = false;
-    int index = -1;
     for (gfx::Shader* shader : m_shaders) {
         if (!shader) break;
-        ++index;
-
         if (shader->has_uniform("iPos")) shader->set_uniform("iPos", m_pos);
         if (shader->has_uniform("iEye")) shader->set_uniform("iEye", m_eye);
         if (shader->has_uniform("iResolution")) {
@@ -214,25 +209,29 @@ void App::update() {
         if (shader->has_uniform("iChannel1")) shader->set_uniform("iChannel1", m_channels[1]);
         if (shader->has_uniform("iChannel2")) shader->set_uniform("iChannel2", m_channels[2]);
         if (shader->has_uniform("iChannel3")) shader->set_uniform("iChannel3", m_channels[3]);
-
         for (Variable& v : m_variables) {
             std::string u = "_" + v.name;
             if (shader->has_uniform(u)) {
                 shader->set_uniform(u, v.val);
                 if (!v.rendered) {
                     if (gui::drag_float(v.name.c_str(), v.val, 1, v.min, v.max)) {
-                        values_changed = true;
+                        m_clear_channels = true;
                     }
                     v.rendered = true;
                 }
             }
         }
+    }
 
+    int index = -1;
+    for (gfx::Shader* shader : m_shaders) {
+        if (!shader) break;
+        ++index;
         m_framebuffer->attach_color(m_channels[index]);
         if (m_clear_channels) gfx::clear({}, m_framebuffer);
         gfx::draw(m_rs, shader, m_va, m_framebuffer);
     }
-    m_clear_channels = values_changed;
+    m_clear_channels = false;
 
     if (index >= 0) {
         gfx::clear({0, 0, 0, 0});
