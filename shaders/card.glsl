@@ -39,6 +39,7 @@ float lines(vec3 p) {
 
 //    d = abs(d - 0.4);
 //    return pow(pow(d, 8.0 * $a(0,2)) + pow(z, 8.0 * $a(0,2)), .125 * $r(0,2)) - $t;
+
     return max(d - 0.2, abs(p.z) - 0.5);
 }
 
@@ -148,7 +149,7 @@ vec3 trace(vec3 o, vec3 d) {
 
 
 void main() {
-    vec3 dir = normalize(iEye * vec3(gl_FragCoord.xy / iResolution.x * 2.0 - vec2(1.0, iResolution.y / iResolution.x), 1.5));
+    vec3 dir = normalize(iEye * vec3((gl_FragCoord.xy + rand_dir(gl_FragCoord.xyy).xy) / iResolution.x * 2.0 - vec2(1.0, iResolution.y / iResolution.x), 1.5));
     gl_FragColor = vec4(trace(iPos, dir), 1.0) + texelFetch(iChannel0, ivec2(gl_FragCoord.xy), 0);
 }
 

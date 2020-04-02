@@ -60,6 +60,7 @@ private:
 
     void load_shader();
     void init_channels();
+    void update_view();
 
     static void event_callback(uv_fs_event_t* handle, const char* path, int events, int) {
         App* a = (App*) handle->data;
@@ -72,6 +73,7 @@ private:
 
     glm::vec3 m_pos = { 2.285664, 3.737782, -8.859721 };
     glm::vec2 m_ang = { 0.08, -0.34 };
+    glm::mat3 m_eye;
 
     char const*           m_path;
     uv_loop_t*            m_loop;
@@ -83,6 +85,7 @@ private:
 
     std::array<gfx::Shader*, 4>     m_shaders  = {};
     std::array<gfx::Texture2D*, 4>  m_channels = {};
+    bool                            m_clear_channels = false;
 
     gfx::RenderState   m_rs;
     gfx::VertexArray*  m_va = nullptr;
@@ -109,7 +112,6 @@ void main() {
     gl_FragColor = texture2D(tex, gl_FragCoord.xy * scale);
 }
 )");
-
     init_channels();
 
     m_vb = gfx::VertexBuffer::create(gfx::BufferHint::StaticDraw);
@@ -135,6 +137,7 @@ void main() {
 }
 
 void App::init_channels() {
+    m_clear_channels = true;
     for (gfx::Texture2D*& c : m_channels) {
         delete c;
         c = gfx::Texture2D::create(gfx::TextureFormat::RGBA32F,
@@ -146,10 +149,7 @@ void App::init_channels() {
 }
 
 
-void App::update() {
-    uv_run(m_loop, UV_RUN_NOWAIT);
-    ++m_frame;
-
+void App::update_view() {
     glm::vec3 old_pos = m_pos;
     glm::vec2 old_ang = m_ang;
 
@@ -162,7 +162,7 @@ void App::update() {
     float cx = cosf(m_ang.x);
     float sx = sinf(m_ang.x);
 
-    glm::mat3 eye = glm::mat3{
+    m_eye = glm::mat3{
         cy, 0, -sy,
         0, 1, 0,
         sy, 0, cy,
@@ -177,10 +177,16 @@ void App::update() {
         ks[SDL_SCANCODE_SPACE] - ks[SDL_SCANCODE_LSHIFT],
         ks[SDL_SCANCODE_W]     - ks[SDL_SCANCODE_S],
     };
-    m_pos += eye * mov * 0.1f;
+    m_pos += m_eye * mov * 0.1f;
 
-    bool clear_channels = m_pos != old_pos || m_ang != old_ang || ks[SDL_SCANCODE_RETURN];
+    m_clear_channels |= m_pos != old_pos || m_ang != old_ang || ks[SDL_SCANCODE_RETURN];
+}
 
+void App::update() {
+    uv_run(m_loop, UV_RUN_NOWAIT);
+    ++m_frame;
+
+    update_view();
 
     for (Variable& v : m_variables) v.rendered = false;
 
@@ -188,13 +194,14 @@ void App::update() {
     gui::set_next_window_pos({5, 5});
     gui::begin_window("Variables");
 
+    bool values_changed = false;
     int index = -1;
     for (gfx::Shader* shader : m_shaders) {
         if (!shader) break;
         ++index;
 
         if (shader->has_uniform("iPos")) shader->set_uniform("iPos", m_pos);
-        if (shader->has_uniform("iEye")) shader->set_uniform("iEye", eye);
+        if (shader->has_uniform("iEye")) shader->set_uniform("iEye", m_eye);
         if (shader->has_uniform("iResolution")) {
             shader->set_uniform("iResolution", glm::vec2(m_channels[0]->get_width(),
                                                          m_channels[0]->get_height()));
@@ -213,17 +220,19 @@ void App::update() {
             if (shader->has_uniform(u)) {
                 shader->set_uniform(u, v.val);
                 if (!v.rendered) {
-                    gui::drag_float(v.name.c_str(), v.val, 1, v.min, v.max);
+                    if (gui::drag_float(v.name.c_str(), v.val, 1, v.min, v.max)) {
+                        values_changed = true;
+                    }
                     v.rendered = true;
                 }
             }
         }
 
         m_framebuffer->attach_color(m_channels[index]);
-        if (clear_channels) gfx::clear({}, m_framebuffer);
+        if (m_clear_channels) gfx::clear({}, m_framebuffer);
         gfx::draw(m_rs, shader, m_va, m_framebuffer);
     }
-
+    m_clear_channels = values_changed;
 
     if (index >= 0) {
         gfx::clear({0, 0, 0, 0});
@@ -274,6 +283,7 @@ private:
 
 void App::load_shader() {
     printf("loading shader...\n");
+    m_clear_channels = true;
 
     std::ifstream file(m_path);
     if (!file.is_open()) {
