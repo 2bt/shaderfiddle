@@ -34,6 +34,8 @@ public:
 
         delete m_framebuffer;
         delete m_scale_shader;
+        delete m_overlay_tex;
+        delete m_overlay_shader;
     }
 
     void process_event(SDL_Event const& e) override {
@@ -71,10 +73,9 @@ private:
         }
     }
 
-    glm::vec3 m_pos = { 2.285664, 3.737782, -8.859721 };
-    glm::vec2 m_ang = { 0.08, -0.34 };
+    glm::vec3 m_pos = { 65.829933, 8.649950, -136.384216 };
+    glm::vec2 m_ang = { 0.040000, -0.400000 };
     glm::mat3 m_eye;
-
     char const*           m_path;
     uv_loop_t*            m_loop;
     uv_fs_event_t         m_handle;
@@ -94,17 +95,33 @@ private:
     int                m_scale        = 1;
     gfx::Framebuffer*  m_framebuffer  = nullptr;
     gfx::Shader*       m_scale_shader = nullptr;
+
+    gfx::Texture2D*    m_overlay_tex    = nullptr;
+    gfx::Shader*       m_overlay_shader = nullptr;
 };
 
 
 void App::init() {
     gui::init();
 
+//    m_overlay_tex    = gfx::Texture2D::create("overlay.png");
+//    m_overlay_shader = gfx::Shader::create(R"(#version 130
+//void main() { gl_Position = gl_Vertex; }
+//)", R"(#version 130
+//uniform sampler2D tex;
+//uniform vec2 res;
+//void main() {
+//    ivec2 ts = textureSize(tex, 0);
+//    ivec2 tc = ivec2(gl_FragCoord.xy + (ts - res) * 0.5);
+//    vec4 d = texelFetch(tex, ivec2(tc.x, ts.y - tc.y), 0);
+//    gl_FragColor = vec4(d.rgb, 0.5);
+//}
+//)");
+//    m_overlay_shader->set_uniform("tex", m_overlay_tex);
+
     m_framebuffer = gfx::Framebuffer::create();
     m_scale_shader = gfx::Shader::create(R"(#version 130
-void main() {
-    gl_Position = gl_Vertex;
-}
+void main() { gl_Position = gl_Vertex; }
 )", R"(#version 130
 uniform sampler2D tex;
 uniform vec2 scale;
@@ -177,7 +194,7 @@ void App::update_view() {
         ks[SDL_SCANCODE_SPACE] - ks[SDL_SCANCODE_LSHIFT],
         ks[SDL_SCANCODE_W]     - ks[SDL_SCANCODE_S],
     };
-    m_pos += m_eye * mov * 0.1f;
+    m_pos += m_eye * mov * 1.0f;
 
     m_clear_channels |= m_pos != old_pos || m_ang != old_ang || ks[SDL_SCANCODE_RETURN];
 }
@@ -234,12 +251,19 @@ void App::update() {
     m_clear_channels = false;
 
     if (index >= 0) {
-        gfx::clear({0, 0, 0, 0});
-        m_framebuffer->attach_color(m_channels[index]);
+        gfx::clear({});
         m_scale_shader->set_uniform("tex", m_channels[index]);
         m_scale_shader->set_uniform("scale", 1.0f / glm::vec2(fx::screen_width(), fx::screen_height()));
         gfx::draw(m_rs, m_scale_shader, m_va);
     }
+
+    // overlay
+//    gfx::RenderState rs;
+//    rs.blend_enabled      = true;
+//    rs.blend_func_src_rgb = gfx::BlendFunc::SrcAlpha;
+//    rs.blend_func_dst_rgb = gfx::BlendFunc::OneMinusSrcAlpha;
+//    m_overlay_shader->set_uniform("res", glm::vec2(fx::screen_width(), fx::screen_height()));
+//    gfx::draw(rs, m_overlay_shader, m_va);
 
     gui::render();
 }

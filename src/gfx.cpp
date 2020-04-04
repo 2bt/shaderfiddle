@@ -252,7 +252,7 @@ struct Texture2DImpl : Texture2D {
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, map_to_gl(wrap));
             glTexImage2D(GL_TEXTURE_2D, 0, map_to_gl(format),
 //                         m_width, m_height, 0, map_to_gl(format),
-                         m_width, m_height, 0, GL_RED,
+                         m_width, m_height, 0, data ? map_to_gl(format) : GL_RED,
                          GL_UNSIGNED_BYTE, data);
         }
 

@@ -1,9 +1,19 @@
 #define E  0.001
 #define PI 3.141592653589793
+#define M_WALL   2.0
+#define M_LOGO   3.0
+#define M_RING   4.0
+#define M_SKY    5.0
+#define M_SKY2   6.0
+#define SIMPLE   0
+
 
 float smin(float a, float b) {
     return min(a, b) - pow(max(0, 1.0 - abs(a - b)) * $k(0, 0.1), $smooth);
-    return min(a, b);
+}
+float smax(float a, float b) {
+    return length(vec2(min(a, -1.0) - a, min(b, -1.0) - b)) - 1.0;
+//    return length(vec2(a, b) - min(vec2(a, b), vec2(-1))) - 1.0;
 }
 
 float max3(vec3 v) {
@@ -20,7 +30,7 @@ void rot(inout vec2 p, float v) {
     p = vec2(co * p.x + si * p.y, co * p.y - si * p.x);
 }
 
-float line2(vec2 p, vec2 a, vec2 b) {
+float line(vec2 p, vec2 a, vec2 b) {
     vec2 ab = b - a;
     vec2 ap = p - a;
     vec2 n = ab * clamp(dot(ab, ap) / dot(ab, ab), 0.0, 1.0);
@@ -31,9 +41,9 @@ float lines(vec3 p) {
 //    rot(p.xz, iTime);
 
     float d = 9e9;
-    d = min(d, line2(p.xy, vec2(-2.0, 3.0), vec2(0.0, 5.0)));
-    d = min(d, line2(p.xy, vec2(-2.0, 3.0), vec2(3.0, 1.0)));
-    d = min(d, line2(p.xy, vec2(0.0, 5.0), vec2(3.0, 1.0)));
+    d = min(d, line(p.xy, vec2(-2.0, 3.0), vec2(0.0, 5.0)));
+    d = min(d, line(p.xy, vec2(-2.0, 3.0), vec2(3.0, 1.0)));
+    d = min(d, line(p.xy, vec2(0.0, 5.0), vec2(3.0, 1.0)));
 
     d = abs(d - $t);
 
@@ -51,17 +61,39 @@ vec2 mmax(vec2 a, vec2 b) {
 }
 
 
-#define M_WALL   2.0
-#define M_BOX    3.0
-#define M_SKY    4.0
-#define SIMPLE   0
+vec2 logo(vec3 p) {
+
+    float l = length(p.xy);
+    float f = 9e9;
+    f = min(f, length(vec2(p.x, p.y - clamp(p.y, 0.0, 18.0))) - 9);
+    f = min(f, max(p.y, abs(l - 15.0) - 2.0));
+    f = min(f, max(abs(p.x) - 2.0, abs(p.y + 20.0) - 5.0));
+    f = min(f, max(abs(p.x) - 8.0, abs(p.y + 24.0) - 2.0));
+
+    float o = 8.1;
+    float r = 53.0;
+
+    vec2 d = mmin(vec2(f, M_LOGO), vec2(abs(l - r) - o, M_RING));
+
+//    if (abs(l - r) - o < 0) {
+//        float d = length(p + vec2(o * 0.7071) * sign(p.x - p.y)) - r;
+//        col = vec3(d < 0.0 ? 0.2 : 0.5);
+//    }
+
+    return vec2(smax(d.x, abs(p.z) - 4.0), d.y);
+}
+
+
 
 
 vec2 map(vec3 p) {
-    vec2 d = vec2(-p.y + 10.0, M_SKY);
-    d = mmin(d, vec2(-box(p + vec3(0.0, -10.0, 0.0), vec3(10.0, 10.0, 10.0)), M_WALL));
+    vec2 d = vec2(-p.y + 119.0, M_SKY2);
+    d = mmin(d, vec2(p.z + 270.0, M_SKY));
+    d = mmin(d, vec2(-box(p + vec3(0.0, 0.0, 150.0), vec3(120.0, 120.0, 150.0)), M_WALL));
+//    d = mmin(d, vec2(-p.z, M_WALL));
 
-    d = mmin(d, vec2(lines(p), M_BOX));
+    //d = mmin(d, vec2(lines(p), M_LOGO));
+    d = mmin(d, logo(p));
 
 
     return d;
@@ -80,7 +112,7 @@ vec3 normal(vec3 p) {
 vec2 march(vec3 o, vec3 d) {
     float t = 0.0;
     vec3 p;
-    for (int i = 0; i < 100 && t < 50.0; ++i) {
+    for (int i = 0; i < 200 && t < 500.0; ++i) {
         p = o + d * t;
         vec2 s = map(p);
         if (s.x < E) return vec2(t, s.y);
@@ -103,7 +135,7 @@ vec3 rand3dTo3d(vec3 value) {
 
 vec3 rand_dir(vec3 p) {
     vec3 v;
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < 5; ++i) {
         v = rand3dTo3d(p + vec3(i)) * 2.0 - vec3(1.0);
         if (dot(v, v) < 1.01) break;
     }
@@ -124,13 +156,19 @@ vec3 trace(vec3 o, vec3 d) {
             vec3 n = normal(p);
 
             // material color
-            vec3 c = vec3(0.2);
-            if (m.y == M_BOX) c = vec3(0.5, 0.1, 0.1);
+            vec3 c = vec3(0.8);
+            if (m.y == M_LOGO) c = vec3(0.05);
+            if (m.y == M_RING) {
+                float o = 8.1;
+                float r = 53.0;
+                float d = length(p.xy + vec2(o * 0.7071) * sign(p.x - p.y)) - r;
+                c = vec3(d < 0.0 ? 0.2 : 0.3);
+            }
 
-            if (SIMPLE != 0) {
+            #if SIMPLE
                 col += c * max(dot(n, light), 0.1);
                 break;
-            }
+            #endif
 
             vec3 r = rand_dir(p);
             if (dot(n, r) < 0.0) r = -r;
@@ -140,7 +178,11 @@ vec3 trace(vec3 o, vec3 d) {
             continue;
         }
         if (m.y < M_SKY + 0.5) {
-            col += vec3(2.0, 3.0, 4.0) * attenuation;
+            col += vec3(9.0, 6.0, 3.0) * attenuation;
+            break;
+        }
+        if (m.y < M_SKY2 + 0.5) {
+            col += vec3(3.0, 4.0, 6.0) * attenuation;
             break;
         }
     }
