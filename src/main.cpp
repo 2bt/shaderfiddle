@@ -73,7 +73,7 @@ private:
         }
     }
 
-    glm::vec3 m_pos = { 65.829933, 8.649950, -136.384216 };
+    glm::vec3 m_pos = { 65.861076, 6.651550, -136.457886 };
     glm::vec2 m_ang = { 0.040000, -0.400000 };
     glm::mat3 m_eye;
     char const*           m_path;

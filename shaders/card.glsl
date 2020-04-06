@@ -62,24 +62,13 @@ vec2 mmax(vec2 a, vec2 b) {
 
 
 vec2 logo(vec3 p) {
-
     float l = length(p.xy);
     float f = 9e9;
     f = min(f, length(vec2(p.x, p.y - clamp(p.y, 0.0, 18.0))) - 9);
     f = min(f, max(p.y, abs(l - 15.0) - 2.0));
     f = min(f, max(abs(p.x) - 2.0, abs(p.y + 20.0) - 5.0));
     f = min(f, max(abs(p.x) - 8.0, abs(p.y + 24.0) - 2.0));
-
-    float o = 8.1;
-    float r = 53.0;
-
-    vec2 d = mmin(vec2(f, M_LOGO), vec2(abs(l - r) - o, M_RING));
-
-//    if (abs(l - r) - o < 0) {
-//        float d = length(p + vec2(o * 0.7071) * sign(p.x - p.y)) - r;
-//        col = vec3(d < 0.0 ? 0.2 : 0.5);
-//    }
-
+    vec2 d = mmin(vec2(f, M_LOGO), vec2(abs(l - 53.0) - 8.1, M_RING));
     return vec2(smax(d.x, abs(p.z) - 4.0), d.y);
 }
 
@@ -87,10 +76,9 @@ vec2 logo(vec3 p) {
 
 
 vec2 map(vec3 p) {
-    vec2 d = vec2(-p.y + 119.0, M_SKY2);
-    d = mmin(d, vec2(p.z + 270.0, M_SKY));
-    d = mmin(d, vec2(-box(p + vec3(0.0, 0.0, 150.0), vec3(120.0, 120.0, 150.0)), M_WALL));
-//    d = mmin(d, vec2(-p.z, M_WALL));
+    vec2 d = vec2(-p.y + 100.0, M_SKY2);
+    d = mmin(d, vec2(p.z + 250.0, M_SKY));
+    d = mmin(d, vec2(-p.z, M_WALL));
 
     //d = mmin(d, vec2(lines(p), M_LOGO));
     d = mmin(d, logo(p));
@@ -112,7 +100,7 @@ vec3 normal(vec3 p) {
 vec2 march(vec3 o, vec3 d) {
     float t = 0.0;
     vec3 p;
-    for (int i = 0; i < 200 && t < 500.0; ++i) {
+    for (int i = 0; i < 100 && t < 300.0; ++i) {
         p = o + d * t;
         vec2 s = map(p);
         if (s.x < E) return vec2(t, s.y);
@@ -148,7 +136,7 @@ vec3 trace(vec3 o, vec3 d) {
     vec3 attenuation = vec3(1.0);
 
     vec3 col = vec3(0.0);
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < 2; ++i) {
         vec2 m = march(o, d);
         if (m.y == 0.0) break;
         vec3 p = o + d * m.x;
@@ -157,11 +145,9 @@ vec3 trace(vec3 o, vec3 d) {
 
             // material color
             vec3 c = vec3(0.8);
-            if (m.y == M_LOGO) c = vec3(0.05);
+            if (m.y == M_LOGO) c = vec3(0.07);
             if (m.y == M_RING) {
-                float o = 8.1;
-                float r = 53.0;
-                float d = length(p.xy + vec2(o * 0.7071) * sign(p.x - p.y)) - r;
+                float d = length(p.xy + vec2(5.727) * sign(p.x - p.y)) - 53.0;
                 c = vec3(d < 0.0 ? 0.2 : 0.3);
             }
 
